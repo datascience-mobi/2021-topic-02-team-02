@@ -106,6 +106,10 @@ abline(0,1,col="red")
 dev.copy2eps(file="scatter.plot")
 dev.off()
 
+```
+
+
+
 #Analysis
 
 setwd("C:/Users/metho/iCloudDrive/Studium/4.FS/Bioinfo/RStudio/tables/")
@@ -161,7 +165,6 @@ boxplot(t(data.breast),col=rainbow(100),main = "TRAs in breast cancer ", cex.axi
 box.plot = paste("boxplot_breast_cancer_TRAs_",".eps",sep="")
 dev.copy2eps(file="box.plot")
 
-```
 
 
 
