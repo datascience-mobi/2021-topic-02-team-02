@@ -1,0 +1,158 @@
+---
+title: "Create microarray table"
+output: html_document
+---
+
+
+1. Install Bioconducter 
+#```{r}
+if (!requireNamespace("BiocManager", quietly=TRUE))
+  install.packages("BiocManager")
+BiocManager::install(version = "3.12")
+```
+
+2. Install affy, vsn and AnnotationDbi
+#```{r}
+BiocManager::install("affy")
+BiocManager::install("vsn")
+BiocManager::install("AnnotationDbi")
+```
+
+3. Define working directory variable
+```{r}
+wd="C:/Users/metho/iCloudDrive/Studium/4.FS/Bioinfo/RStudio"
+```
+
+4.Load library packages
+```{r}
+library(affy)
+library(vsn)
+library(AnnotationDbi)
+library(hgu133plus2hsenstcdf, lib.loc = paste0(wd, "/Packages"))
+library(hgu133plus2hsenstprobe, lib.loc = paste0(wd, "/Packages"))
+library(hexbin)
+library(ggplot2)
+```
+
+5. Read in CEL files, Breast Cancer
+```{r}
+setwd(paste0(wd, "/rawdata/GSE149507 lung cancer"))
+cels = list.files(pattern = "CEL")
+data = ReadAffy(filenames = cels, verbose = TRUE)
+data@cdfName = "HGU133Plus2_Hs_ENST"
+
+new = substr(cels, 1, nchar(cels)-4)
+colnames(exprs(data)) = new
+rownames(data@phenoData) = new
+rownames(data@protocolData) = new
+
+save(data, file = paste0(wd, "/data.RData"))
+```
+
+6. Single chip quality control
+```{r}
+image(data, col=rainbow(100, start = 0, end = 0.75)[100:1])
+```
+
+7. vsn normalisation
+```{r}
+data.norm = vsnrma(data)
+save(data.norm, file = paste0(wd, "/data_norm.RData"))
+
+```
+
+8. meanSdPlot
+```{r}
+meanSdPlot(data.norm)
+ggsave("Mean_sd_plot.pdf")
+```
+
+9. Extract expression values
+```{r}
+dataExprs = exprs(data.norm)
+head(dataExprs)
+dim(dataExprs)
+```
+
+10. Only ensemble IDs
+```{r}
+dataExprs = dataExprs[grepl("ENST", rownames(dataExprs)), ]
+head(dataExprs)
+dim(dataExprs)
+```
+
+11. Remove .x_at suffix
+```{r}
+rownames(dataExprs) <- unlist(lapply(strsplit(rownames(dataExprs), split = "\\."), "[", 1))
+head(dataExprs)
+```
+
+12. Load ensemble IDs and gene symbols
+```{r}
+setwd(paste0(wd, "/tables"))
+ensembl_df = read.csv("ensembl.103.txt", sep = "\t")
+head(ensembl_df)
+
+transcriptIDs = as.character(ensembl_df[, "Transcript.stable.ID"])
+geneSymbol = as.character(ensembl_df[, "HGNC.symbol"])
+names(geneSymbol) = transcriptIDs
+head(geneSymbol)
+```
+
+13. Replace ensemble IDs with HGNC symbol
+```{r}
+chipIDs = rownames(dataExprs)
+noMatchIDs = chipIDs[!chipIDs %in% transcriptIDs]
+length(noMatchIDs)
+
+newChipIDs = chipIDs[chipIDs %in% transcriptIDs]
+dataExprs = dataExprs[newChipIDs, ]
+dim(dataExprs)
+
+symbol = geneSymbol[newChipIDs]
+rownames(dataExprs) = as.character(symbol)
+head(dataExprs)
+```
+
+
+14.extract from matrix only genes of interest
+```{r}
+
+setwd(paste0(wd, "/tra/"))
+
+TRA1 = read.csv(file = "human.csv")
+
+#or (please, note that sometimes upper case and lower case and other problems disturb the search, for example levels, which you can eliminate with as.character and toupper
+
+row.ind=which(toupper(TRA1) %in% as.character(symbol))
+
+dataExprs.sub=dataExprs[row.ind,]
+
+
+```
+
+15. Transform the matrix and make a boxplot ( experimental :/ )
+```{r}
+
+data.csn = dataExprs.sub 
+#data.csn=data[dataExprs.sub,]
+#head(data.csn)
+#dim(data.csn)
+
+par(las=2)
+
+boxplot(t(data.csn),col=rainbow(length(rownames(data.csn))),main="gene expression of thyroid-specific genes in thyroid cancer",cex.axis=0.8)
+
+#sort alphabetically
+
+#order.vector=sort(colnames(t(data.csn)),index.return=T)$ix
+
+#boxplot(t(data.csn)[,order.vector],col=rainbow(length(rownames(data.csn))),main="gene expression of thyroid-specific genes in thyroid cancer",cex.axis=0.8)
+
+```
+
+
+
+
+
+
