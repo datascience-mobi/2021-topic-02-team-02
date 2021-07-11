@@ -446,21 +446,29 @@ heatmap(dataExprs[genesofinterest,])
 ```{r}
 #PCA 
 
-pca.data <- t(dataExprs[CSN,]) # get the data for CSN genes from the expression data frame
+data_csn <- dataExprs[CSN, ]  # get the data for CSN genes from the expression data frame
+csn_transcripts <- rownames(as.data.frame(data_csn))
+rownames(data_csn) <- csn_transcripts
 
-pca.matrix <- data.matrix(pca.data)
 
-data.pr <- prcomp((pca.matrix), center = TRUE, scale = TRUE) #perform the pca
-summary(data.pr)
+
+data_pca <- t(data_csn)
+res_pca <- prcomp(data_pca, scale = TRUE) #perform the pca
+summary(res_pca)
 
 
 ```
 
 
 ```{r}
+pca.cor <- cor(data_pca, method= "pearson")
+
+```
+
+```{r}
 # Screenplot for the first 11 PCs
 
-screeplot(data.pr, type = "l", npcs = 11, main = "Screeplot of the 11 PCs")
+screeplot(res_pca, type = "l", npcs = 11, main = "Screeplot of the 11 PCs")
 abline(h = 1, col="red", lty=5)
 legend("topright", legend=c("Eigenvalue = 1"),
        col=c("red"), lty=5, cex=0.6)
@@ -477,7 +485,7 @@ legend("topright", legend=c("Eigenvalue = 1"),
 ```{r}
 # cumulative variance plot to visualize the PCs with >90% cumulative variance
 
-cumpro <- cumsum(data.pr$sdev^2 / sum(data.pr$sdev^2))
+cumpro <- cumsum(res_pca$sdev^2 / sum(res_pca$sdev^2))
 plot(cumpro, xlab = "PC #", ylab = "Amount of explained variance", main = "Cumulative variance plot")
 abline(v = 5, col="blue", lty=5)
 abline(h = 0.91381, col="blue", lty=5)
@@ -489,38 +497,30 @@ legend("topleft", legend=c("Cut-off @ PC1"),
 ````{r}
 # plotting the two PCs which explain the most variance
 
-plot(data.pr$x[,1],data.pr$x[,2], xlab="PC1 (%)", ylab = "PC2 (%)", main = "PC1 / PC2 - plot")
+plot(res_pca$x[,1],res_pca$x[,2], xlab="PC1 (%)", ylab = "PC2 (%)", main = "PC1 / PC2 - plot")
 
 
 
 ```
 ```{r}
 
-chipnames = rownames(pca.data)
 
-cancer = grep("_ca", chipnames)
-healthy = grep("_n", chipnames)
+samples <- rownames(data_pca)
+group <- sapply(samples, function(sample) {
+  ifelse(str_detect(sample, "_ca"), "Cancer", "Healthy")
+})
 
-library("factoextra")
-fviz_pca_ind(data.pr, geom.ind = "point", pointshape = 21, 
-             pointsize = 2, 
-          #   fill.ind = pca.data[cancer, healthy,],
-             col.ind = "black", 
-             palette = "jco", 
-             addEllipses = TRUE,
-             label = "var",
-             col.var = "black",
-             repel = TRUE,
-             legend.title = "Diagnosis") +
+fviz_pca_biplot(res_pca,
+             label="var",
+             habillage=group,
+             addEllipses=TRUE,
+             select.var = list(contrib = 10)) +
+  theme_minimal() +
   ggtitle("2D PCA-plot from 181 feature dataset") +
   theme(plot.title = element_text(hjust = 0.5))
   
 
 ```
-
-
-
-
 
 
 
