@@ -2,7 +2,9 @@
 title: "Project"
 author: "Andreas Breuß, Anastassia Fink, Leon Hornich, Yuan Sun"
 date: "03.06.2021"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 1. Install Bioconducter 
@@ -453,9 +455,7 @@ csn_transcripts <- rownames(as.data.frame(data_csn))
 rownames(data_csn) <- csn_transcripts
 
 
-
 data_pca <- t(data_csn)
-
 
 
 ```
@@ -467,7 +467,6 @@ library(ggcorrplot)
 pca.corr <- cor(data_pca) # correlation matrix
 
 ggcorrplot(pca.corr) # correlation plot before filtering
-
 
 
 ```
@@ -493,8 +492,7 @@ ggcorrplot(pca.corr) # correlation plot after filtering highly correlated variab
 
 csn_pca_names <- rownames(pca.corr) # The names of the transcripts with a correlation below 0.8
 
-
-filtered_csn <- subset(dataExprs, rownames(dataExprs) %in% csn_pca_names) #expression data of the filtered names
+filtered_csn <- subset(as.data.frame(dataExprs), rownames(as.data.frame(dataExprs)) %in% csn_pca_names) #expression data of the filtered names
 
 csn_filtered_transcripts <- rownames(as.data.frame(filtered_csn))
 rownames(filtered_csn) <- csn_filtered_transcripts
@@ -528,16 +526,13 @@ legend("topright", legend=c("Eigenvalue = 1"),
 
 
 
-
-
-
 ```{r}
 # cumulative variance plot to visualize the PCs with >90% cumulative variance
 
 cumpro <- cumsum(res_pca$sdev^2 / sum(res_pca$sdev^2))
 plot(cumpro, xlab = "PC #", ylab = "Amount of explained variance", main = "Cumulative variance plot")
-abline(v = 5, col="blue", lty=5)
-abline(h = 0.91381, col="blue", lty=5)
+abline(v = 7, col="blue", lty=5)
+abline(h = 0.92941, col="blue", lty=5)
 legend("topleft", legend=c("Cut-off @ PC1"),
        col=c("blue"), lty=5, cex=0.6)
 
@@ -552,7 +547,7 @@ plot(res_pca$x[,1],res_pca$x[,2], xlab="PC1 (%)", ylab = "PC2 (%)", main = "PC1 
 
 ```
 
-```{r}
+```{r, eval = FALSE}
 library(factoextra)
 library(stringr)
 
@@ -567,7 +562,7 @@ fviz_pca_biplot(res_pca,
              addEllipses = TRUE,
              select.var = list(contrib = 10)) +
   theme_minimal() +
-  ggtitle("2D PCA-plot from 181 feature dataset") +
+  ggtitle("2D PCA-plot from 20 feature dataset") +
   theme(plot.title = element_text(hjust = 0.5))
 
 ```
