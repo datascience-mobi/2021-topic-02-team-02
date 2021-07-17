@@ -443,6 +443,8 @@ heatmap(dataExprs[genesofinterest,])
 
 
 
+Time for the PCA
+
 ```{r}
 #PCA 
 
@@ -453,17 +455,64 @@ rownames(data_csn) <- csn_transcripts
 
 
 data_pca <- t(data_csn)
-res_pca <- prcomp(data_pca, scale = TRUE) #perform the pca
-summary(res_pca)
+
 
 
 ```
 
 
 ```{r}
-pca.cor <- cor(data_pca, method= "pearson")
+#Data filtering
+library(ggcorrplot)
+pca.corr <- cor(data_pca) # correlation matrix
+
+ggcorrplot(pca.corr) # correlation plot before filtering
+
+
 
 ```
+
+```{r}
+
+variables_filter <- rev(rownames(pca.corr))
+ for (var in variables_filter) {
+  tmp <- pca.corr[var,-which(colnames(pca.corr) == var)]
+  if (any(tmp > 0.8)) {
+    pca.corr <- pca.corr[-which(rownames(pca.corr) == var), -which(colnames(pca.corr) == var)]
+  }
+}
+
+ggcorrplot(pca.corr) # correlation plot after filtering highly correlated variables
+
+
+
+```
+
+
+```{r}
+
+csn_pca_names <- rownames(pca.corr) # The names of the transcripts with a correlation below 0.8
+
+
+filtered_csn <- subset(dataExprs, rownames(dataExprs) %in% csn_pca_names) #expression data of the filtered names
+
+csn_filtered_transcripts <- rownames(as.data.frame(filtered_csn))
+rownames(filtered_csn) <- csn_filtered_transcripts
+
+filtered_pca <- t(filtered_csn)
+
+```
+
+
+
+```{r}
+
+res_pca <- prcomp(filtered_pca , scale = TRUE) #perform the pca
+summary(res_pca)
+
+
+```
+
 
 ```{r}
 # Screenplot for the first 11 PCs
@@ -502,23 +551,24 @@ plot(res_pca$x[,1],res_pca$x[,2], xlab="PC1 (%)", ylab = "PC2 (%)", main = "PC1 
 
 
 ```
+
 ```{r}
+library(factoextra)
+library(stringr)
 
-
-samples <- rownames(data_pca)
+samples <- rownames(filtered_pca)
 group <- sapply(samples, function(sample) {
   ifelse(str_detect(sample, "_ca"), "Cancer", "Healthy")
 })
 
 fviz_pca_biplot(res_pca,
-             label="var",
-             habillage=group,
-             addEllipses=TRUE,
+             label = "var",
+             habillage = group,
+             addEllipses = TRUE,
              select.var = list(contrib = 10)) +
   theme_minimal() +
   ggtitle("2D PCA-plot from 181 feature dataset") +
   theme(plot.title = element_text(hjust = 0.5))
-  
 
 ```
 
