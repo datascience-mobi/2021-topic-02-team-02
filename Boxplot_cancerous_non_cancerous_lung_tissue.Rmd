@@ -1,0 +1,639 @@
+---
+title: "Project"
+author: "Andreas Breuß, Anastassia Fink, Leon Hornich, Yuan Sun"
+date: "03.06.2021"
+output: html_document
+---
+
+1. Install Bioconducter 
+#```{r}
+
+if (!requireNamespace("BiocManager", quietly=TRUE))
+  install.packages("BiocManager")
+BiocManager::install(version = "3.12")
+
+```
+
+2. Install affy, vsn and AnnotationDbi
+#```{r}
+
+BiocManager::install("affy")
+BiocManager::install("vsn")
+BiocManager::install("AnnotationDbi")
+install.packages("rstudioapi")
+install.packages("tidyverse")
+install.packages("plotrix")
+
+```
+
+
+---
+## R Markdown
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# define working directory
+```{r setup, include=FALSE}
+
+
+wd="C:/Users/Leon/Desktop/SS2021 DataAnalysis/The Role of CSN in cancer/The role of Csn in cancer"
+
+
+
+
+
+```
+
+
+# libraries
+
+```{r}
+library(affy)
+library(vsn)
+library(AnnotationDbi)
+library(hgu133plus2hsenstcdf, lib.loc = "C:/Users/Leon/Desktop/SS2021 DataAnalysis/The Role of CSN in cancer/The role of Csn in cancer/packages")
+library(hgu133plus2hsenstprobe, lib.loc ="C:/Users/Leon/Desktop/SS2021 DataAnalysis/The Role of CSN in cancer/The role of Csn in cancer/packages")
+library(hexbin)
+library(rstudioapi)
+library(tidyverse)
+library(stringr)
+library(readr)
+library(dplyr)
+library(plotrix)
+library(ggplot2)
+```
+
+
+
+# Read in .CEL files
+```{r}
+
+setwd(paste0(wd, "/rawdata/GSE149507 lung cancer"))
+
+data = ReadAffy()
+data@cdfName<-"HGU133PLUS2_Hs_ENST"
+
+setwd(paste0(wd,"/sessions/rda"))
+
+lungcancer_matrix <- as.data.frame(exprs(data))
+
+save.image(file="rawdata.lungcancer.pdf")
+image(data, col = rainbow(100, start = 0, end = 0.75)[100:1])
+
+
+
+```
+
+
+# overview / will be changed
+#```{r}
+
+#microarrays
+dim(lungcancer_matrix)[2]
+
+# names of the samples
+colnames(data)
+substr(colnames(lungcancer_matrix), 1,10)
+
+# gene count
+dim(lungcancer_matrix)[1]
+
+# probe set names (or Affymetrix IDs) - are changed when changing cdfName
+featureNames(data)[1:10]
+
+#expression table
+head(lungcancer_matrix)
+
+```
+
+#```{r}
+
+setwd(paste0(wd,"/plots"))
+
+for (i in 1:24){
+  image(data[,i], col = rainbow(100, start = 0, end = 0.75)[100:1])
+  file.name = paste0("lungcancer_", str_remove(colnames(lungcancer_matrix)[1],".CEL"),".pdf")
+  # dev.copy2pdf(file = file.name)
+}
+
+```
+
+
+# cleanup NA and/or space
+```{r}
+ 
+apply(lungcancer_matrix, 2, function(x){sum(is.na(x))})
+apply(lungcancer_matrix, 2, function(x){sum(x == 0)})
+sum(sapply(rownames(lungcancer_matrix), function(x){sum(x == "")}))
+
+
+```
+
+```{r}
+
+data.norm <- vsnrma(data)
+data_vsnrma_matrix <- exprs(data.norm)
+
+head(data.norm)
+head(data_vsnrma_matrix)
+
+#save
+
+#setwd(paste0(wd,"/sessions/rda"))
+
+#save.image(file="normalized_data..pdf")
+
+```
+
+
+# Plots
+```{r}
+
+#meanSdPlot
+meanSdPlot(data.norm)
+
+setwd(paste0(wd,"/plots/"))
+dev.copy2eps(file="meanSdPlot_lungcancer_vsnrma_normalized.eps")
+
+
+
+# Boxplot before normalization
+
+par(las = 2) #axis labels 
+
+par(mai = c(0.5,1,0.5,0.1))
+
+boxplot(data, names = substr(colnames(lungcancer_matrix), 1,12),
+        col = rainbow(24), cex.axis=0.6, 
+        main="sample expression Lungcancer", 
+        horizontal = FALSE)
+
+
+setwd(paste0(wd,"/plots/"))
+#dev.copy2eps(file="boxplot_lungcancer_rawdata.pdf")
+
+
+
+#Boxplot normalized data
+
+par(las = 2) #axis labels 
+
+par(mai = c(0.5,1,0.5,0.1))
+
+boxplot(data_vsnrma_matrix, names = substr(colnames(lungcancer_matrix), 1,12),
+        col = rainbow(24), cex.axis=0.6, 
+        main="sample expression Lungcancer", 
+        horizontal = FALSE)
+
+
+setwd(paste0(wd,"/plots/"))
+#dev.copy2eps(file="boxplot_lungcancer_normalized.pdf")
+
+
+```
+
+
+
+# RNA degeneration plot
+```{r}
+
+rnadeg.raw = AffyRNAdeg(data)
+
+#shift & scale
+plotAffyRNAdeg(rnadeg.raw, col=rainbow(24), transform = "shift.scale")
+title(sub = "lungcancer rawdata")
+
+
+setwd(paste0(wd, "/plots/" ,sep = "/"))
+#dev.copy2pdf(file = "lungcancer_rnadeg_rawdata.pdf")
+
+
+#shift
+plotAffyRNAdeg(rnadeg.raw, col = rainbow(24), transform = "shift.only")
+#title(sub = "lungcancer rawdata")
+
+
+setwd(paste0(wd, "/plots/" ,sep = "/"))
+#dev.copy2pdf(file = "lungcancer_rawdata.pdf")
+
+```
+
+
+
+# Scatterplot
+
+```{r}
+
+setwd(paste0(wd,"/plots/"))
+
+for (i in 1:11){
+  plot(exprs(data.norm)[,i], exprs(data.norm)[,i+1], pch = ".",
+       xlab = substr(colnames(lungcancer_matrix), 1,10)[i],
+       ylab = substr(colnames(lungcancer_matrix), 1,10)[i+1])
+  abline(0,1,col="red")
+  
+  title(main = paste("Scatterplot of probe", 
+                     substr(colnames(lungcancer_matrix), 1,10)[i],
+                     "and",
+                     substr(colnames(lungcancer_matrix), 1,10)[i+1],
+                     sep = " ", collapse = NULL))
+  
+  file.name = paste("diabetes_scatterplot_",
+                    substr(colnames(lungcancer_matrix), 1,10)[i],
+                     "_",
+                    substr(colnames(lungcancer_matrix), 1,10)[i+1],
+                    ".pdf",
+                    sep = "")
+  dev.copy2pdf(file = file.name)
+}
+
+
+```
+
+# Extract expression values
+```{r}
+
+dataExprs = exprs(data.norm)
+head(dataExprs)
+dim(dataExprs)
+
+```
+
+# ensemble IDs
+```{r}
+
+dataExprs = dataExprs[grepl("ENST", rownames(dataExprs)), ]
+head(dataExprs)
+dim(dataExprs)
+
+```
+
+# remove x_at suffix
+```{r}
+
+rownames(dataExprs) <- unlist(lapply(strsplit(rownames(dataExprs), split = "\\."), "[", 1))
+head(dataExprs)
+
+```
+
+```{r}
+# change working directory
+setwd(paste0(wd,"/tables/tra files human/tsv/"))
+
+
+# load tra files
+tra_human1 =read.csv(file="Human_protein_atlas_TRA_5median_genes_annotated.tsv",sep=",")
+tra_human2 =read.csv(file="tra.2014.human.5x.table.tsv",sep="\t")
+tra_human3 =read.csv(file="tra.2014.human.roth.5x.table.tsv",sep="\t")
+tra_human4 =read.csv(file="tra.2017.human.gtex.5x.table.tsv",sep="\t")
+
+
+# find gene patterns in tra files 
+ens_num_human1 = tra_human1[grep(paste(c("CSNA", "CSNB", "CSNG", "CSND", "CSNK", "LALBA", "WAP", "ELF5", "SULT1D1", "ODAM"), collapse = "|"), tra_human1$Symbol, ignore.case = TRUE), c(1, 6)]
+ens_num_human2 = tra_human2[grep(paste(c("CSNA", "CSNB", "CSNG", "CSND", "CSNK", "LALBA", "WAP", "ELF5", "SULT1D1", "ODAM"), collapse = "|"), tra_human2$gene.symbol, ignore.case = TRUE), c(2, 3)]
+ens_num_human3 = tra_human3[grep(paste(c("CSNA", "CSNB", "CSNG", "CSND", "CSNK", "LALBA", "WAP", "ELF5", "SULT1D1", "ODAM"), collapse = "|"), tra_human3$gene.symbol, ignore.case = TRUE), c(2, 3)]
+ens_num_human4 = tra_human4[grep(paste(c("CSNA", "CSNB", "CSNG", "CSND", "CSNK", "LALBA", "WAP", "ELF5", "SULT1D1", "ODAM"), collapse = "|"), tra_human4$gene.symbol, ignore.case = TRUE), c(2, 3)]
+
+# check on the rows
+ens_num_human1
+ens_num_human2
+ens_num_human3
+ens_num_human4
+
+# ens_num_human4 can be removed because there is no matches!
+
+typeof(ens_num_human1)  # we are working with lists!
+
+# remove list elements because they dont actually match the gene names 
+
+ens_num_human1 = ens_num_human1[-c(1, 5), ]
+ens_num_human1
+ens_num_human3 = ens_num_human3[-c(5, 11, 14), ]
+ens_num_human3
+
+# create vector with ensemble ids
+ens_vector = c(ens_num_human1[1], ens_num_human2[1], ens_num_human3[1])
+ens_vector = unlist(ens_vector, use.names = FALSE)
+ens_vector = unique(ens_vector)
+ens_vector # this is the ens vector we need to work with 
+
+# now we match the vector ens_vector with the rownames of ensembl_df to gain the corresponding transcript.stable.ID
+
+df_ensembl_df = data.frame(ensembl_df)
+match_ensembl_df = df_ensembl_df[df_ensembl_df$Gene.stable.ID %in% ens_vector, ]
+
+# create a vector containing all transcript.stable.IDs
+trans_stable_id_vector = match_ensembl_df$Transcript.stable.ID
+trans_stable_id_vector = unique(trans_stable_id_vector)
+
+# now we only select rows from geneExprs that fit trans_stable_id_vector
+library(dplyr)
+df_dataExprs = data.frame(dataExprs)
+df_dataExprs = tibble::rownames_to_column(df_dataExprs, "rownames")
+df_dataExprs = df_dataExprs[df_dataExprs$rownames %in% trans_stable_id_vector, ]
+df_dataExprs_1 = df_dataExprs[ , -1]
+rownames(df_dataExprs_1) = df_dataExprs[ , 1]
+df_dataExprs_1
+
+# Create 2 dataframes with cancerous and non cancerous samples
+df_dataExprs_1_ca = df_dataExprs_1[ , c(1, 3, 5, 7, 9, 11)]
+df_dataExprs_1_n = df_dataExprs_1[ , c(2, 4, 6, 8, 10, 12)]
+
+# Now we replace the ensembl names with HGNC symbols and orger alphabetically 
+rownames_df_dataExprs_1 = rownames(df_dataExprs_1_ca)
+df_symbol = data.frame(symbol)
+genes_df_dataExprs_1 = df_symbol[rownames(df_symbol) %in% rownames_df_dataExprs_1,]
+
+
+# We now define a vector including all transcript IDs! All to one gene correlating transcrips IDs are ordered alphabetically onwards from a!
+genes_df_dataExprs_1_subgroups = c("CSNK1G2_a", "ELF5_a", "CSNK1A1_a", "CSNK2A2_a", "LALBA_a","CSNK1G1_a", "ELF5_b", "CSNK1A1_b", "ODAM_a", "ELF5_c", "CSNK1A1_c", "CSNK1A1_d", "ODAM_b", "ODAM_c", "ODAM_d", "CSNK1A1_e", "CSNK1A1_f", "ELF5_d", "LALBA_b", "CSNK1G1_b", "CSNK2A2_b", "CSNK2A2_c", "CSNK2A2_d", "CSNK2A2_e", "CSNK1G2_b", "CSNK1G2_c", "CSNK1G1_c", "CSNK1A1_g", "CSNK1A1_h", "CSNK1G1_d", "CSNK1A1_i", "CSNK1G1_e", "CSNK1G2_d", "ELF5_e", "CSNK1G1_f", "CSNK1G1_g", "CSNK1G1_h", "CSNK1G1_i", "CSNK1G1_j", "CSNK1G1_k", "CSNK1G1_l", "CSNK1G1_m", "CSNK1A1_j", "CSNK1A1_k", "CSNK1A1_l", "CSNK1A1_m", "CSNK1A1_n", "ELF5_f", "CSNK2A2_f", "CSNK2A2_g")
+length(unique(genes_df_dataExprs_1_subgroups))
+
+
+.rowNamesDF(df_dataExprs_1_ca, make.names = FALSE) = genes_df_dataExprs_1_subgroups
+.rowNamesDF(df_dataExprs_1_n, make.names = FALSE) = genes_df_dataExprs_1_subgroups
+
+# Now we order the rows alphabetically
+df_dataExprs_1_ca = df_dataExprs_1_ca[order(row.names(df_dataExprs_1_ca)), ]
+df_dataExprs_1_n = df_dataExprs_1_n[order(row.names(df_dataExprs_1_n)), ]
+
+# Now we do 2 seperate boxplots for cancerous and non-cancerous data
+## cancerous genes
+for ( i in length(df_dataExprs_1_ca)) {
+  boxplot(t(df_dataExprs_1_ca), col = rainbow(100), main = "expression values of CSN and related genes", cex = 0.4, cex.axis = 0.4, las = 2)
+}
+
+## non-cancerous genes
+for ( i in length(df_dataExprs_1_n)) {
+  boxplot(t(df_dataExprs_1_n), col = rainbow(100), main = "expression values of CSN and related genes", cex = 0.4, cex.axis = 0.4, las = 2)
+}
+```
+
+# ensemble IDs and gene symbols
+```{r}
+
+setwd(paste0(wd, "/tables"))
+ensembl_df = read.csv("ensembl.103.txt", sep = ",")
+head(ensembl_df)
+
+transcriptIDs = as.character(ensembl_df[, "Transcript.stable.ID"])
+geneSymbol = as.character(ensembl_df[, "HGNC.symbol"])
+names(geneSymbol) = transcriptIDs
+head(geneSymbol)
+
+```
+
+# Replace ensemble IDs with HGNC symbol
+```{r}
+
+chipIDs = rownames(dataExprs)
+noMatchIDs = chipIDs[!chipIDs %in% transcriptIDs]
+length(noMatchIDs)
+
+newChipIDs = chipIDs[chipIDs %in% transcriptIDs]
+dataExprs = dataExprs[newChipIDs, ]
+dim(dataExprs)
+
+symbol = geneSymbol[newChipIDs]
+
+rownames(dataExprs) = as.character(symbol)
+
+head(dataExprs)
+```
+
+
+
+
+# TRA tissues / genesofinterest
+#```{r}
+
+setwd(paste0(wd,"/tables/tra files human/tsv/"))
+
+human1 =read.csv(file="Human_protein_atlas_TRA_5median_genes_annotated.tsv",sep=",")
+human2 =read.csv(file="tra.2014.human.5x.table.tsv",sep="\t")
+human3 =read.csv(file="tra.2014.human.roth.5x.table.tsv",sep="\t")
+human4 =read.csv(file="tra.2017.human.gtex.5x.table.tsv",sep="\t")
+
+
+TRA1.symbol=human1[,6]
+TRA2.symbol=human2[,3]
+TRA3.symbol=human3[,3]
+TRA4.symbol=human4[,3]
+
+
+CSN1_tissue = human1[grep("CSN", TRA1.symbol),11]
+CSN1_symbol = human1[grep("CSN", TRA1.symbol),6]
+CSN2_tissue = human2[grep("CSN", TRA2.symbol),11]
+CSN2_symbol = human2[grep("CSN", TRA2.symbol),3]
+CSN3_tissue = human3[grep("CSN", TRA3.symbol),11]
+CSN3_symbol = human3[grep("CSN", TRA3.symbol),3]
+CSN4_tissue = human4[grep("CSN", TRA4.symbol),10]
+CSN4_symbol = human4[grep("CSN", TRA4.symbol),3]
+
+
+tissue_vector <- c(CSN1_tissue, CSN2_tissue,CSN3_tissue,CSN4_tissue)
+tissue_df <- data.frame(tissue_vector)
+symbol_vector <- c(CSN1_symbol, CSN2_symbol,CSN3_symbol,CSN4_symbol)
+tissue_df["symbol"] <- c(symbol_vector)
+
+tissue_df <- tissue_df %>% mutate(tissue_vector = str_replace(string = tissue_vector, pattern = "Testis",replacement = "testis"))
+tissue_df <- tissue_df %>% mutate(tissue_vector = str_replace(string = tissue_vector, pattern = "testes",replacement = "testis"))
+tissue_df <- tissue_df %>% mutate(tissue_vector = str_replace(string = tissue_vector, pattern = "Minor Salivary Gland",replacement = "salivary_gland"))
+
+tissue_df <- tissue_df[!duplicated(tissue_df), ]
+
+
+tissuecount = data.frame(table(tissue_df[,"tissue_vector"]))
+
+
+id <- c('A','B','C','D','E','F','G','H','I','J','K')
+tissuecount["index"] <- id
+ 
+tissuecount
+#dplyr::mutate(id = LETTERS[row_number()] )
+```
+
+
+```{r}
+slices <- tissuecount[, "Freq"]
+lbls <- tissuecount[, "Var1"]
+pct <- round(slices/sum(slices)*100)
+lbls <- paste(lbls, pct) # add percents to labels
+lbls <- paste(lbls,"%",sep="") # ad % to labels
+pie(slices,labels = lbls, col=rainbow(length(lbls)),
+   main="Tissue distribution - TRA´s ", cex = 0.8)
+```
+
+
+
+# TRA Chromosomes
+
+#```{r}
+
+CSN1 = grep("CSN", TRA1.symbol)
+CSN2 = grep("CSN", TRA2.symbol)
+CSN3 = grep("CSN", TRA3.symbol)
+CSN4 = grep("CSN", TRA4.symbol)
+
+
+chrom1 = human1[CSN1,"Chromosome"]
+chrom2 = human2[CSN2,7]
+chrom3 = human3[CSN3,7]
+chrom4 = human4[CSN4,"ensembl.chrom"]
+
+chrom <- c(chrom1,chrom2,chrom3,chrom4)
+chrom_df = data.frame(chrom)
+chrom_df["symbols"] <- c(human1[CSN1,6],human2[CSN2,3],human3[CSN3,3],human4[CSN4,3] )
+
+chrom_df <-chrom_df[!duplicated(chrom_df), ]
+
+chrom = chrom_df[,"chrom"]
+chrom_human_sorted = sort(chrom, decreasing = FALSE)
+#plot
+
+
+barplot(table(chrom_human_sorted),
+main="Chromosomes of human CSN-genes",
+xlab="Chromosome",
+ylab="Count",
+col = rainbow(24),
+yaxp = c(0, 3, 3)
+)
+
+
+```
+
+#```{r}
+setwd(paste0(wd,"/tables/tra files human/tsv/mouse/"))
+
+mouse1 =read.csv(file="tra.2014.mouse.5x.table",sep="\t")
+mouse2 =read.csv(file="tra.2014.mouse.4301.5x.table",sep="\t")
+
+
+
+TRA1.symbol_mouse=mouse1[,7]
+TRA2.symbol_mouse=mouse2[,7]
+
+
+
+CSN1_tissue_mouse = mouse1[grep("CSN", TRA1.symbol),11]
+CSN1_symbol_mouse = mouse1[grep("CSN", TRA1.symbol),3]
+CSN2_tissue_mouse = mouse2[grep("CSN", TRA2.symbol),11]
+CSN2_symbol_mouse = mouse2[grep("CSN", TRA2.symbol),3]
+
+
+
+tissue_vector_mouse <- c(CSN1_tissue_mouse, CSN2_tissue_mouse)
+tissue_df_mouse <- data.frame(tissue_vector_mouse)
+symbol_vector_mouse <- c(CSN1_symbol_mouse, CSN2_symbol_mouse)
+tissue_df_mouse["symbol"] <- c(symbol_vector_mouse)
+
+tissue_df_mouse <- tissue_df_mouse %>% mutate(tissue_vector_mouse = str_replace(string = tissue_vector_mouse, pattern = "Testis",replacement = "testis"))
+tissue_df_mouse <- tissue_df_mouse %>% mutate(tissue_vector_mouse = str_replace(string = tissue_vector_mouse, pattern = "testes",replacement = "testis"))
+tissue_df_mouse <- tissue_df_mouse %>% mutate(tissue_vector_mouse = str_replace(string = tissue_vector_mouse, pattern = "Minor Salivary Gland",replacement = "salivary_gland"))
+
+tissue_df_mouse <- tissue_df_mouse[!duplicated(tissue_df_mouse), ]
+
+
+tissuecount_mouse = data.frame(table(tissue_df_mouse[,"tissue_vector"]))
+
+
+id <- c('A','B','C','D','E','F','G','H','I','J','K')
+tissuecount_mouse["index"] <- id
+ 
+tissuecount
+#dplyr::mutate(id = LETTERS[row_number()] )
+```
+
+#```{r}
+slices_mouse <- tissuecount_mouse[, "Freq"]
+lbls_mouse <- tissuecount_mouse[, "Var1"]
+pct_mouse <- round(slices_mouse/sum(slices_mouse)*100)
+lbls_mouse <- paste(lbls_mouse, pct_mouse) # add percents to labels
+lbls_mouse <- paste(lbls_mouse,"%",sep="") # ad % to labels
+pie(slices_mouse,labels = lbls_mouse, col=rainbow(length(lbls_mouse)),
+   main="Tissue distribution - TRA´s ", cex = 0.8)
+```
+
+#```{r}
+CSN1_mouse = grep("CSN", TRA1.symbol_mouse)
+CSN2_mouse = grep("CSN", TRA2.symbol_mouse)
+
+
+
+chrom1_mouse = human1[CSN1_mouse,7]
+chrom2_mouse = human2[CSN2_mouse,7]
+
+
+chrom_mouse <- c(chrom1_mouse, chrom2_mouse)
+chrom_df_mouse = data.frame(chrom_mouse)
+chrom_df_mouse["symbols"] <- c(mouse1[CSN1_mouse,3],mouse2[CSN2_mouse,3])
+
+chrom_df_mouse <-chrom_df_mouse[!duplicated(chrom_df_mouse), ]
+
+chrom_mouse = chrom_df_mouse[,"chrom"]
+chrom_mouse_sorted = sort(chrom_mouse, decreasing = FALSE)
+#plot
+
+
+barplot(table(chrom_mouse_sorted),
+main="Chromosomes of mouse CSN-genes",
+xlab="Chromosome",
+ylab="Count",
+col = rainbow(24),
+yaxp = c(0, 3, 3)
+)
+```
+
+# heatmap of cancersets
+
+#```{r}
+
+genelist = rownames(dataExprs)
+
+CSN = grep("CSN", genelist)
+ELF5 = grep("ELF5", genelist)
+LALBA = grep("LALBA", genelist)
+SULT = grep("SULT", genelist)
+ODAM = grep("ODAM", genelist)
+
+genesofinterest <- c(CSN, ELF5,LALBA,SULT,ODAM)
+
+heatmap(dataExprs[genesofinterest,])
+
+
+```
+
+#```{r}
+
+
+
+
+
+```
+
+
+
+
+#Analysis
+
+###```
+
+par(las=2)
+
+boxplot(t(data.sub),col=rainbow(length(rownames(data.sub))),main="gene expression of thyroid-specific genes in thyroid cancer",cex.axis=0.8)
+
+#sort alphabetically
+
+order.vector=sort(colnames(t(data.sub)),index.return=T)$ix
+
+boxplot(t(data.sub)[,order.vector],col=rainbow(length(rownames(data.sub))),main="gene expression of thyroid-specific genes in thyroid cancer",cex.axis=0.8)
+
+
+
+
+
+
+
