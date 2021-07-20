@@ -1,0 +1,1295 @@
+---
+title: "Final report"
+author: "Andreas Breuß, Anastassia Fink, Leon Hornich, Yuan Sun"
+date: "19.07.2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r, echo = F}
+knitr::opts_chunk$set(echo = TRUE, comment = NA, results = "hide", comment = F, message = F, warnings = FALSE)
+## R Markdown
+```
+
+```{r,echo = F, eval = FALSE, results = "hide", comment = F, message = F}
+
+if (!requireNamespace("BiocManager", quietly=TRUE))
+  install.packages("BiocManager")
+BiocManager::install(version = "3.12")
+
+```
+
+
+```{r,echo = F, eval = FALSE, fig.show='hide',results = "hide", comment = F, message = F}
+
+BiocManager::install("affy")
+BiocManager::install("vsn")
+BiocManager::install("AnnotationDbi")
+install.packages("rstudioapi")
+install.packages("tidyverse")
+install.packages("plotrix")
+install.packages("ggcorrplot")
+install.packages("factoextra")
+install.packages("stringr")
+install.packages("pROC")
+install.packages("randomForest")
+
+install.packages("pheatmap")
+install.packages("matrixStats")
+
+#install.packages("gplot")
+
+```
+
+
+---
+
+## Introduction
+
+Tissue-restricted antigens (TRAs) are antigens which are highly expressed in a specific tissue and are otherwise mostly absent in different body tissues. The only other tissue where all TRAs are expressed in the body are the medullary thymic epithelial cells (mTECs) during so called promiscuous gene expression (pGE). pGE is an important step in the process of negative selection of T-Cells. The negative selection of autoreactive T-Cells is a vital step to prevent autoimmune reactions in humans. (Kyewski and Derbinski, 2004)
+
+Some TRAs are overexpressed in cancer for unknown reasons. Because they are otherwise strictly regulated and only expressed in specific tissues, this makes them great targets for cancer immunotherapy.(Kyewski and Derbinski, 2004; Rosenberg, 1999)
+
+In this context we want to look at the casein gene family.
+The casein genes (CSN) are a gene family located in the casein gene region on the longer arm of chromosome 4 in humans. (Rijnkels, 2002)
+
+The casein Gene family contains the five genes *Csna*, *Csnb*, *Csng*, *Csnd* and *Csnk*.
+The CSN genes are regulated by hormones to be temporarily expressed during late pregnancy and the postpartum lactation period.
+The expression of CSN genes is spatially restricted to mammary gland epithelial cells (MECs). (Derbinski et al., 2007)
+
+In the MECs of lactating female mice the expression of CSN genes is correlated with other functionally related genes.These functionally related and coexpressed genes are the milk protein genes lacalbumin-$\alpha$ (*Lalba*), whey acidic protein (*WAP*) and the transcription factor *Elf5* (E74-like factor 5). *Elf5* is involved in the regulation of *WAP* expression.
+In mice the CSN genes are located in the CSN gene region on chromosome 5. However, *Lalba* is located on chromosome 15 and *WAP* on chromosome 11. Thus, these genes are coexpressed, but not colocalized. 
+The genes *Sult1d1* (sulfotransferase family 1D, member 1) and *Odam* (odontogenic ameloblast associated) are colocalized with the CSN genes in the CSN gene region on chromosome 5 in mice. However, the expression of these colocalized, but not functionally related genes *Sult1d1* and *Odam* is not correlated with the expression of CSN.(Derbinski et al., 2007)
+
+In this project our primary goal was it to investigate the expression of CSN genes in tumorous tissue of lung cancer and four different types of breast cancer.
+In this sense we wanted to determine if the CSN genes are up-regulated in breast or lung cancer, which would make them potentially good targets for cancer immunotherapy.
+Furthermore we investigated if the expression of casein genes is correlated with other functionally related genes like *Lalba*, *WAP* and *Elf5* in breast or lung cancer, similarly to their expression in MECs, or if it may show a correlated expression to colocalized but functionally unrelated genes like *Sult1d1* and *Odam*.
+If CSN genes are up-regulated in one of the cancer types this would give us a first hint about the way how they are up-regulated in the cancer cells. 
+
+We analyzed two datasets. The first one contained the gene expression data of cancerous and non-cancerous tissue from small cell lung cancer patients.
+The second dataset was build from the gene expression data from patients of the four different breast cancer types HER2, LumA, LumB and TNBC.
+
+Small cell lung cancer (SCLC) is  classified as a high-grade neuroendocrine tumor. SCLC usually occurs in heavy smokers, it has a very bad prognosis and currently no targeted therapy is available. It is assumed that the inactivation of *TP53* and *RB1* are the initiating mutations which lead to SCLC.(Gazdar et al., 2017; Cai et al., 2021)
+
+HER2 positive breast cancer is characterized by the overexpression of human epidermal growth factor receptor-2 (HER2) on breast cancer cells. Because of the overexpression of HER2, HER2 positive breast cancer can be treated with antibodies against HER2. (Maubant et al., 2015)
+
+In luminal A (LumA) and luminal B (LumB) breast cancer the estrogen receptor and the progesterone receptor is expressed, as well as other hormone receptor-related genes. This expression allows for targeted therapy with tamoxifen. (Maubant et al., 2015; Maire et al., 2013)
+
+Triple negative breast cancer (TNBC) is characterized by its lack of estrogen receptor and progesterone receptor expression and no overexpression of HER2. TNBC describes a group of different breast cancers with these characteristics, which usually have a poor prognosis because of its high proliferation rate and genetic instability. Additionally, currently no targeted therapy is available for TNBC, which makes it even more interesting for exploration of possible therapeutic targets. (Maubant et al., 2015; Maire et al., 2013, Maire et al., 2013)
+
+
+```{r setup, include=FALSE, echo = F, results="hide"}
+# define working directory
+
+
+wd="C:/Users/Andreas/Desktop/Bioinfo/RStudio"
+
+
+setwd(paste0(wd,"/tra/"))
+
+
+```
+
+```{r, echo = F, message = F, comment = F, results="hide"}
+
+# libraries
+
+library(affy)
+library(vsn)
+library(AnnotationDbi)
+library(hgu133plus2hsenstcdf, lib.loc = "C:/Users/Andreas/Desktop/Bioinfo/RStudio/Packages")
+library(hgu133plus2hsenstprobe, lib.loc ="C:/Users/Andreas/Desktop/Bioinfo/RStudio/Packages")
+library(hexbin)
+library(rstudioapi)
+library(tidyverse)
+library(stringr)
+library(readr)
+library(dplyr)
+library(plotrix)
+library(ggplot2)
+library(ggcorrplot)
+library(pROC) 
+library(randomForest)
+
+library(pheatmap)
+library(matrixStats)
+
+#library(gplot) 
+
+
+```
+## Methods and results
+
+The breast cancer dataset includes 20 Chips of Breast cancer samples with 5 for each different subtype, which were mentioned before. The lung cancer dataset consists of 6 patients of lung cancer samples which bare 2 chips per patient, and as mentioned: one cancerous and one non-cancerous sample and therefore 12 chips in total. 
+First, we started with implementing the raw data from the CEL files into our r file. For this task we had to know which specific microarray chip we are using (HGU133PLUS2_Hs_ENST) since they have different alignments. So, we had implemented the referring libraries hgu133plus2hsenstcdf and hgu133plus2hsenstprobe after we installed the BiocManager package which includes the affy, vsn and AnnotationDbi package. These packages are used for the normalization of the data into a matrix and are also used for exchanging the affy ID´s with the relating gen name or so-called gen symbol.
+After displaying the CEL files we did not discover any abnormal patterns at first sight and continued after saving the output as pdf to ensure the scale stays in a 1:1 ratio since r studio tends to automatically review it rectangular. In the next step a short data clean-up was made, generally looking for NA´s or corrupted data. As far as the data clean up shows, no missing values were found and the vsn normalization of the data was performed and a matrix was created for the later use.
+
+```{r, echo = F, fig.show='hide', message = F, comment = F, results="hide"}
+
+# Read in .CEL files
+
+#breastcancer
+setwd(paste0(wd, "/rawdata/GSE65216 breast cancer TNBC Her2 LumA LumB"))
+
+data_b = ReadAffy()
+data_b@cdfName<-"HGU133PLUS2_Hs_ENST"
+
+setwd(paste0(wd,"/sessions/rda"))
+
+breastcancer_matrix <- as.data.frame(exprs(data_b))
+
+save.image(file="rawdata.breastcancer.pdf")
+image(data_b, col = rainbow(100, start = 0, end = 0.75)[100:1])
+
+#lungcancer
+
+setwd(paste0(wd, "/rawdata/GSE149507 lung cancer"))
+
+data = ReadAffy()
+data@cdfName<-"HGU133PLUS2_Hs_ENST"
+
+setwd(paste0(wd,"/sessions/rda"))
+
+lungcancer_matrix <- as.data.frame(exprs(data))
+
+save.image(file="rawdata.lungcancer.pdf")
+image(data, col = rainbow(100, start = 0, end = 0.75)[100:1])
+
+```
+
+```{r, echo = F, message = F, comment = F, results="hide"}
+
+# cleanup NA and/or space
+
+apply(breastcancer_matrix, 2, function(x){sum(is.na(x))})
+apply(breastcancer_matrix, 2, function(x){sum(x == 0)})
+sum(sapply(rownames(breastcancer_matrix), function(x){sum(x == "")}))
+
+ 
+apply(lungcancer_matrix, 2, function(x){sum(is.na(x))})
+apply(lungcancer_matrix, 2, function(x){sum(x == 0)})
+sum(sapply(rownames(lungcancer_matrix), function(x){sum(x == "")}))
+
+
+```
+
+```{r, message = F, comment = F,results="hide"}
+
+#normalization
+
+#breastcancer
+data_b.norm <- vsnrma(data_b)
+data_b_vsnrma_matrix <- exprs(data_b.norm)
+
+```
+
+```{r, echo = F, message = F, comment = F,results="hide"}
+
+#save
+
+setwd(paste0(wd,"/sessions/rda"))
+
+save.image(file="normalized_data_b.pdf")
+
+#lungcancer
+data.norm <- vsnrma(data)
+data_vsnrma_matrix <- exprs(data.norm)
+
+#head(data.norm)
+#head(data_vsnrma_matrix)
+
+#save
+
+setwd(paste0(wd,"/sessions/rda"))
+
+save.image(file="normalized_data.pdf")
+
+```
+
+Before the date is used for statistics the quality of the data must be ensured and therefore, we ran several quality controls at first. Starting with a meanSd plot looking for outliers. We also did compare the expression values of the different chip’s trough boxplots, before and after normalization to have a comparison since running only one of them could lead to missing some information.
+Out of these 2 plots we assumed that the data from chip 9 of the lung cancer dataset could be of lower quality.
+
+```{r, echo = F, fig.show='hide', message = F, comment = F, results="hide"}
+
+# Plots
+
+#breastcancer
+#meanSdPlot
+meanSdPlot(data_b.norm)
+
+setwd(paste0(wd,"/plots/"))
+dev.copy2eps(file="meanSdPlot_breastcancer_vsnrma_normalized.eps")
+
+
+
+# Boxplot before normalization
+
+par(las = 2) #axis labels 
+
+par(mai = c(0.5,1,0.5,0.1))
+
+boxplot(data_b, names = substr(colnames(breastcancer_matrix), 1,12),
+        col = rainbow(24), cex.axis=0.6, 
+        main="sample expression breastcancer", 
+        horizontal = FALSE)
+
+
+setwd(paste0(wd,"/plots/"))
+dev.copy2eps(file="boxplot_breastcancer_rawdata.pdf")
+
+
+
+#Boxplot normalized data
+
+par(las = 2) #axis labels 
+
+par(mai = c(0.5,1,0.5,0.1))
+
+boxplot(data_b_vsnrma_matrix, names = substr(colnames(breastcancer_matrix), 1,12),
+        col = rainbow(20), cex.axis=0.6, 
+        main="sample expression breastcancer", 
+        horizontal = FALSE)
+
+
+setwd(paste0(wd,"/plots/"))
+dev.copy2eps(file="boxplot_breastcancer_normalized.pdf")
+
+
+
+#lungcancer
+
+#meanSdPlot
+meanSdPlot(data.norm)
+
+setwd(paste0(wd,"/plots/"))
+dev.copy2eps(file="meanSdPlot_lungcancer_vsnrma_normalized.eps")
+
+```
+```{r, echo = F, message = F, comment = F, results="hide", fig.align='center', fig.cap="\\label{fig:figs}Qc Boxplots"}
+
+# Boxplot before normalization
+
+par(las = 2) #axis labels 
+
+par(mai = c(0.5,1,0.5,0.1))
+
+boxplot(data, names = substr(colnames(lungcancer_matrix), 1,12),
+        col = rainbow(24), cex.axis=0.6, 
+        main="sample expression lungcancer", 
+        horizontal = FALSE)
+
+
+setwd(paste0(wd,"/plots/"))
+dev.copy2eps(file="boxplot_lungcancer_rawdata.pdf")
+
+
+#Boxplot normalized data
+
+par(las = 2) #axis labels 
+
+par(mai = c(0.5,1,0.5,0.1))
+
+boxplot(data_vsnrma_matrix, names = substr(colnames(lungcancer_matrix), 1,12),
+        col = rainbow(12), cex.axis=0.6, 
+        main="sample expression Lungcancer", 
+        horizontal = FALSE)
+
+
+setwd(paste0(wd,"/plots/"))
+dev.copy2eps(file="boxplot_lungcancer_normalized.pdf")
+
+
+```
+
+For further proof of quality of the rtPCR, two rna degradation plots each were applied, one shifted and scaled and the other one just scaled. Here again chip 9 as mentioned before showing abnormal behaviour. Last we compared the different chips of each dataset trough scatterplots.
+After observing the scatterplots we finally decided to get rid of chip 9.
+
+
+```{r, echo = F, fig.show='hide'}
+
+# RNA degeneration plot
+
+rnadeg.raw_b = AffyRNAdeg(data_b)
+
+#shift & scale
+plotAffyRNAdeg(rnadeg.raw_b, col=rainbow(24), transform = "shift.scale")
+title(sub = "breastcancer rawdata")
+
+
+setwd(paste0(wd, "/plots/" ,sep = "/"))
+dev.copy2pdf(file = "breastcancer_rnadeg_rawdata.pdf")
+
+
+#shift
+plotAffyRNAdeg(rnadeg.raw_b, col = rainbow(24), transform = "shift.only")
+title(sub = "breastcancer rawdata")
+
+
+setwd(paste0(wd, "/plots/" ,sep = "/"))
+dev.copy2pdf(file = "breastcancer_rawdata.pdf")
+
+
+#lungcancer
+
+rnadeg.raw = AffyRNAdeg(data)
+
+#shift & scale
+plotAffyRNAdeg(rnadeg.raw, col=rainbow(24), transform = "shift.scale")
+title(sub = "lungcancer rawdata")
+
+
+setwd(paste0(wd, "/plots/" ,sep = "/"))
+dev.copy2pdf(file = "lungcancer_rnadeg_rawdata.pdf")
+
+
+#shift
+plotAffyRNAdeg(rnadeg.raw, col = rainbow(24), transform = "shift.only")
+title(sub = "lungcancer rawdata")
+
+
+setwd(paste0(wd, "/plots/" ,sep = "/"))
+dev.copy2pdf(file = "lungcancer_rawdata.pdf")
+
+```
+
+
+
+```{r, echo = F, fig.show='hide'}
+
+# Scatterplot
+
+setwd(paste0(wd,"/plots/"))
+
+for (i in 1:19){
+  plot(exprs(data_b.norm)[,i], exprs(data_b.norm)[,i+1], pch = ".",
+       xlab = substr(colnames(breastcancer_matrix), 1,10)[i],
+       ylab = substr(colnames(breastcancer_matrix), 1,10)[i+1])
+  abline(0,1,col="red")
+  
+  title(main = paste("Scatterplot of probe", 
+                     substr(colnames(breastcancer_matrix), 1,10)[i],
+                     "and",
+                     substr(colnames(breastcancer_matrix), 1,10)[i+1],
+                     sep = " ", collapse = NULL))
+  
+  file.name = paste("scatterplot_breastcancer",
+                    substr(colnames(breastcancer_matrix), 1,10)[i],
+                     "_",
+                    substr(colnames(breastcancer_matrix), 1,10)[i+1],
+                    ".pdf",
+                    sep = "")
+  dev.copy2pdf(file = file.name)
+}
+
+
+
+#lungcancer
+
+setwd(paste0(wd,"/plots/"))
+
+for (i in 1:11){
+  plot(exprs(data.norm)[,i], exprs(data.norm)[,i+1], pch = ".",
+       xlab = substr(colnames(lungcancer_matrix), 1,10)[i],
+       ylab = substr(colnames(lungcancer_matrix), 1,10)[i+1])
+  abline(0,1,col="red")
+  
+  title(main = paste("Scatterplot of probe", 
+                     substr(colnames(lungcancer_matrix), 1,10)[i],
+                     "and",
+                     substr(colnames(lungcancer_matrix), 1,10)[i+1],
+                     sep = " ", collapse = NULL))
+  
+  file.name = paste("scatterplot_lung_cancer",
+                    substr(colnames(lungcancer_matrix), 1,10)[i],
+                     "_",
+                    substr(colnames(lungcancer_matrix), 1,10)[i+1],
+                    ".pdf",
+                    sep = "")
+  dev.copy2pdf(file = file.name)
+}
+
+
+```
+
+Subsequential the expression values were extracted, the x_at suffix was removed and the ensembl.103.txt file was read into our r file to provide the missing gen symbols trough the ensemble ID as mentioned before. 
+
+```{r, echo = F}
+
+# Extract expression values
+
+#breastcancer
+dataExprs_b = exprs(data_b.norm)
+#head(dataExprs_b)
+dim(dataExprs_b)
+
+#lungcancer
+dataExprs = exprs(data.norm)
+#head(dataExprs)
+dim(dataExprs)
+
+```
+
+
+```{r, echo = F}
+
+# ensemble IDs
+
+#breastcancer
+dataExprs_b = dataExprs_b[grepl("ENST", rownames(dataExprs_b)), ]
+#head(dataExprs_b)
+dim(dataExprs_b)
+
+#lungcancer
+dataExprs = dataExprs[grepl("ENST", rownames(dataExprs)), ]
+#head(dataExprs)
+dim(dataExprs)
+
+```
+
+
+```{r, echo = F}
+
+# remove x_at suffix
+
+#breastcancer
+rownames(dataExprs_b) <- unlist(lapply(strsplit(rownames(dataExprs_b), split = "\\."), "[", 1))
+head(dataExprs_b)
+
+#lungcancer
+rownames(dataExprs) <- unlist(lapply(strsplit(rownames(dataExprs), split = "\\."), "[", 1))
+head(dataExprs)
+
+```
+
+
+
+
+```{r, echo = F}
+
+#ensembl read
+
+#breastcancer+lungcancer
+setwd(paste0(wd, "/tables"))
+ensembl_df = read.csv("ensembl.103.txt", sep = ",")
+head(ensembl_df)
+
+transcriptIDs = as.character(ensembl_df[, "Transcript.stable.ID"])
+geneSymbol = as.character(ensembl_df[, "HGNC.symbol"])
+names(geneSymbol) = transcriptIDs
+head(geneSymbol)
+
+
+
+```
+
+
+```{r, echo = F}
+
+# Replace ensemble IDs with HGNC symbol
+
+#breatscancer
+chipIDs = rownames(dataExprs_b)
+noMatchIDs = chipIDs[!chipIDs %in% transcriptIDs]
+length(noMatchIDs)
+
+newChipIDs = chipIDs[chipIDs %in% transcriptIDs]
+dataExprs_b = dataExprs_b[newChipIDs, ]
+dim(dataExprs_b)
+
+symbol = geneSymbol[newChipIDs]
+rownames(dataExprs_b) = as.character(symbol)
+
+head(dataExprs_b)
+
+#lungcancer
+chipIDs = rownames(dataExprs)
+noMatchIDs = chipIDs[!chipIDs %in% transcriptIDs]
+length(noMatchIDs)
+
+newChipIDs = chipIDs[chipIDs %in% transcriptIDs]
+dataExprs = dataExprs[newChipIDs, ]
+dim(dataExprs)
+
+symbol = geneSymbol[newChipIDs]
+rownames(dataExprs) = as.character(symbol)
+
+#removal chip 9 and 10
+dataExprs <- dataExprs[,-c(9,10) ]
+
+
+head(dataExprs)
+
+```
+
+We also observed the tissue distribution of csn genes and did find out that most of the transcripts we found in testis tissue in humans, which is kind of unusual and what we will go further into it in the end of the report.
+
+```{r, echo = F, fig.cap="\\label{fig:figs}TRA tissue distribution"}
+
+# TRA tissues / genesofinterest
+
+setwd(paste0(wd,"/tra/"))
+
+human1 =read.csv(file="Human_protein_atlas_TRA_5median_genes_annotated.tsv",sep=",")
+human2 =read.csv(file="tra.2014.human.5x.table.tsv",sep="\t")
+human3 =read.csv(file="tra.2014.human.roth.5x.table.tsv",sep="\t")
+human4 =read.csv(file="tra.2017.human.gtex.5x.table.tsv",sep="\t")
+
+
+TRA1.symbol=human1[,6]
+TRA2.symbol=human2[,3]
+TRA3.symbol=human3[,3]
+TRA4.symbol=human4[,3]
+
+
+CSN1_tissue = human1[grep("CSN", TRA1.symbol),11]
+CSN1_symbol = human1[grep("CSN", TRA1.symbol),6]
+CSN2_tissue = human2[grep("CSN", TRA2.symbol),11]
+CSN2_symbol = human2[grep("CSN", TRA2.symbol),3]
+CSN3_tissue = human3[grep("CSN", TRA3.symbol),11]
+CSN3_symbol = human3[grep("CSN", TRA3.symbol),3]
+CSN4_tissue = human4[grep("CSN", TRA4.symbol),10]
+CSN4_symbol = human4[grep("CSN", TRA4.symbol),3]
+
+
+tissue_vector <- c(CSN1_tissue, CSN2_tissue,CSN3_tissue,CSN4_tissue)
+tissue_df <- data.frame(tissue_vector)
+symbol_vector <- c(CSN1_symbol, CSN2_symbol,CSN3_symbol,CSN4_symbol)
+tissue_df["symbol"] <- c(symbol_vector)
+
+tissue_df <- tissue_df %>% mutate(tissue_vector = str_replace(string = tissue_vector, pattern = "Testis",replacement = "testis"))
+tissue_df <- tissue_df %>% mutate(tissue_vector = str_replace(string = tissue_vector, pattern = "testes",replacement = "testis"))
+tissue_df <- tissue_df %>% mutate(tissue_vector = str_replace(string = tissue_vector, pattern = "Minor Salivary Gland",replacement = "salivary_gland"))
+
+tissue_df <- tissue_df[!duplicated(tissue_df), ]
+
+
+tissuecount = data.frame(table(tissue_df[,"tissue_vector"]))
+
+
+slices <- tissuecount[, "Freq"]
+lbls <- tissuecount[, "Var1"]
+pct <- round(slices/sum(slices)*100)
+lbls <- paste(lbls, pct) # add percents to labels
+lbls <- paste(lbls,"%",sep="") # ad % to labels
+pie(slices,labels = lbls, col=rainbow(13),
+   main="Tissue distribution - TRA´s ", cex = 0.8)
+
+```
+
+
+```{r, echo = F, fig.show='hide'}
+
+#chromosome count
+
+CSN1 = grep("CSN", TRA1.symbol)
+CSN2 = grep("CSN", TRA2.symbol)
+CSN3 = grep("CSN", TRA3.symbol)
+CSN4 = grep("CSN", TRA4.symbol)
+
+
+chrom1 = human1[CSN1,"Chromosome"]
+chrom2 = human2[CSN2,7]
+chrom3 = human3[CSN3,7]
+chrom4 = human4[CSN4,"ensembl.chrom"]
+
+chrom <- c(chrom1,chrom2,chrom3,chrom4)
+chrom_df = data.frame(chrom)
+chrom_df["symbols"] <- c(human1[CSN1,6],human2[CSN2,3],human3[CSN3,3],human4[CSN4,3] )
+
+chrom_df <-chrom_df[!duplicated(chrom_df), ]
+
+chrom = chrom_df[,"chrom"]
+
+#plot
+
+barplot(table(chrom),
+main="Chromosome location of human CSN-genes",
+xlab="Chromosome",
+ylab="Count",
+col = rainbow(24)
+)
+setwd(paste0(wd,"/plots/"))
+file.name = paste("barplot_chromosomes.pdf")
+dev.copy2pdf(file = file.name)
+
+
+```
+
+## Heatmap
+
+In order to find some structure in the gene expression value we made a heatmap. Due to the high amount of transcripts it is not possible to show the row names. Here we can see the distribution of the gene expression value, it is clearly visible that in the heatmap from lung cancer dataset that the gene CSNK2B in the cancerous group has a clearly higher expression value in cancerous group as the non-cancerous group. Beside that we also find out that the gen CSNK2A1 have also a higher expression value in cancerous group as in the non-cancerous group. With this information we can continue with the t-test to validate our thought whether this genes are really higher expressed in cancerous group as in the non- cancerous group or we can investigate another CSN genes , so we can get an overview on the difference between the cancerous group and non-cancerous group regarding the CSN genes. Genes like ELF5, ODAM, SULTI show no significant difference in the expression pattern between the cancerous and non-cancerous group. So, we will discard these three genes in the following t-test 
+
+Note: GSM1588972_Tum02_Her2 was changed to GSM1588978_Tum02_Her2!!! as solution, because windows doesnt allow to disable autosorting.
+We decided not to cluster the x axis to have a better comparison between the cancerous and the non cancerous samples and also between the different subtypes of cancer.
+
+
+```{r, echo = F, fig.cap="\\label{fig:figs}Expression heatmap"}
+
+# heatmap of cancersets
+
+genelist = rownames(dataExprs)
+genelist_b = rownames(dataExprs_b)
+
+CSN = grep("CSN", genelist)
+ELF5 = grep("ELF5", genelist)
+LALBA = grep("LALBA", genelist)
+SULT = grep("SULT", genelist)
+ODAM = grep("ODAM", genelist)
+
+CSN_b = grep("CSN", genelist_b)
+ELF5_b = grep("ELF5", genelist_b)
+LALBA_b = grep("LALBA", genelist_b)
+SULT_b = grep("SULT", genelist_b)
+ODAM_b = grep("ODAM", genelist_b)
+
+genesofinterest <- c(CSN, ELF5,LALBA,SULT,ODAM)
+genesofinterest_l <- c(CSN, ELF5,LALBA,SULT,ODAM)
+genesofinterest_b <- c(CSN_b, ELF5_b,LALBA_b,SULT_b,ODAM_b)
+
+heatmap(dataExprs[genesofinterest,],Colv=NA,)
+heatmap(dataExprs_b[genesofinterest_b,],Colv=NA)
+
+#annotation <- data.frame(type = grep("ca",dataExprs[genesofinterest,], labels = c("Exp1", "Exp2")))
+#rownames(annotation) <- colnames(dataExprs[genesofinterest,]) # check out the row names of annotation
+
+#pheatmap(dataExprs[genesofinterest,], show_rownames=T, cluster_cols=F, legend = TRUE, #labels_col=paste0(substr(colnames(dataExprs[genesofinterest,]), 17,21)), fontsize_row=5, cellheight=6, annotation = annotation)
+
+setwd(paste0(wd,"/plots/"))
+file.name = paste("heatmap_lungcancer.pdf")
+dev.copy2pdf(file = file.name)
+
+setwd(paste0(wd,"/plots/"))
+file.name = paste("heatmap_breastcancer.pdf")
+dev.copy2pdf(file = file.name)
+
+```
+
+
+## Principal component analysis (PCA)
+
+Principal component analysis (PCA) was performed for the lung cancer dataset and the breast cancer dataset.
+However before the PCA could be performed highly correlated variables, more specifically transcripts with highly correlated expression were filtered out.The threshold for correlation was set at 0,8.
+```{r, echo = F}
+# PCA for lung cancer
+data_csn <- dataExprs[CSN, ]  # get the data for CSN genes from the expression matrix
+csn_transcripts <- rownames(as.data.frame(data_csn)) # get the unique rownames from the data frame
+rownames(data_csn) <- csn_transcripts
+data_pca <- t(data_csn) # transpose the matrix
+```
+
+```{r, echo = F}
+# Data filtering for lung cancer
+library(ggcorrplot)
+pca.corr <- cor(data_pca) # correlation matrix
+# ggcorrplot(pca.corr) # correlation plot before filtering
+```
+
+```{r, echo = F, fig.show='hide'}
+variables_filter <- rev(rownames(pca.corr))
+ for (var in variables_filter) {
+  tmp <- pca.corr[var,-which(colnames(pca.corr) == var)]
+  if (any(tmp > 0.8)) {
+    pca.corr <- pca.corr[-which(rownames(pca.corr) == var), -which(colnames(pca.corr) == var)]
+  }
+} # kick out all genes with a correlation over 0.8
+ggcorrplot(pca.corr) # correlation plot after filtering highly correlated variables
+```
+
+```{r, echo = F, fig.show='hide'}
+csn_pca_names <- rownames(pca.corr) # The names of the transcripts with a correlation below 0.8
+filtered_csn <- subset(as.data.frame(dataExprs), rownames(as.data.frame(dataExprs)) %in% csn_pca_names) #expression data of the filtered transcripts
+csn_filtered_transcripts <- rownames(as.data.frame(filtered_csn))
+rownames(filtered_csn) <- csn_filtered_transcripts
+filtered_pca <- t(filtered_csn) # transpose the matrix of the filtered transcripts
+```
+After filtering of initially 181 CSN transcripts only 20 remained in the lung cancer dataset. With these remaining 20 transcripts the PCA was performed.
+```{r, echo = F}
+res_pca <- prcomp(filtered_pca , scale = TRUE) #perform the pca
+summary(res_pca)
+```
+If we would want to perform a dimension reduction we have to look at the Eigenvalues and cumulative variance of the principal components (PCs).
+In this case we have 12 PCs. For the first 6 PCs the Eigenvalue is above 1 and the cumulative variance adds up to over 90%. This means, that with only 6 PCs we could explain over 90% of the cumulative variance of our lung cancre dataset.
+```{r, echo = F, fig.show='hide'}
+# Screenplot for the first 10 PCs
+screeplot(res_pca, type = "l", npcs = 10, main = "Screeplot of the 11 PCs")
+abline(h = 1, col="red", lty=5)
+legend("topright", legend=c("Eigenvalue = 1"),
+       col=c("red"), lty=5, cex=0.6)
+```
+```{r, echo = F, fig.show='hide'}
+# cumulative variance plot to visualize the PCs with >90% cumulative variance
+cumpro <- cumsum(res_pca$sdev^2 / sum(res_pca$sdev^2))
+plot(cumpro, xlab = "PC #", ylab = "Amount of explained variance", main = "Cumulative variance plot")
+abline(h = 0.9
+       , col="blue", lty=5)
+legend("topleft", legend=c("cumulative variance >90%"),
+       col=c("blue"), lty=5, cex=0.6)
+```
+````{r, echo = F, fig.show='hide'}
+# plotting the two PCs which explain the most variance
+plot(res_pca$x[,1],res_pca$x[,2], xlab="PC1 (28,3 %)", ylab = "PC2 (22,7 %)", main = "PC1 / PC2 - plot")
+```
+However in this case we will only look at the PCA biplot, where the two PCs which explain the most variance are plotted against each other.
+
+```{r, echo = F, fig.cap="\\label{fig:figs}PCA biplot"}
+library(factoextra)
+library(stringr)
+
+samples <- rownames(filtered_pca)
+group <- sapply(samples, function(sample) {
+  ifelse(str_detect(sample, "_ca"), "Cancer", "Healthy")
+}) # mark the healthy and cancer samples in two groups
+
+fviz_pca_biplot(res_pca,
+             label = "var",
+             habillage = group,
+             addEllipses = TRUE,
+             select.var = list(contrib = 10)) +
+  theme_minimal() +
+  ggtitle("2D PCA-plot from 20 feature dataset") +
+  theme(plot.title = element_text(hjust = 0.5)) #the pca biplot
+```
+
+The biplot shows how the transcripts are correlated. Samples which group together are correlated. As we can see, the ellipses which mark the different groups are strongly overlapping and overall all data points are grouped together. This means that there is no significant difference between the group of healthy and cancerous cells in the lung cancer dataset.
+
+Following the same steps we performed a PCA on the breast cancer dataset.
+
+```{r, echo = F}
+#PCA for breast cancer
+
+data_csn_b <- dataExprs_b[CSN, ]  # get the data for CSN genes from the expression data frame
+csn_transcripts_b <- rownames(as.data.frame(data_csn_b))
+rownames(data_csn_b) <- csn_transcripts_b
+
+data_pca_b <- t(data_csn_b)
+```
+After filtering of the transcripts with a correlation above 0.8 19 transcripts from originally 181 transcripts remain.
+On these remaining 19 CSN transcripts PCA is performed.
+```{r, echo = F}
+#Data filtering
+
+library(ggcorrplot)
+pca.corr_b <- cor(data_pca_b) # correlation matrix
+
+# ggcorrplot(pca.corr_b) # correlation plot before filtering
+```
+```{r, echo = F, fig.show='hide'}
+variables_filter_b <- rev(rownames(pca.corr_b))
+ for (var in variables_filter_b) {
+  tmp <- pca.corr_b[var,-which(colnames(pca.corr_b) == var)]
+  if (any(tmp > 0.8)) {
+    pca.corr_b <- pca.corr_b[-which(rownames(pca.corr_b) == var), -which(colnames(pca.corr_b) == var)]
+  }
+}
+
+ggcorrplot(pca.corr_b) # correlation plot after filtering highly correlated variables
+```
+```{r, echo = F}
+csn_pca_names_b <- rownames(pca.corr_b) # The names of the transcripts with a correlation below 0.8
+
+filtered_csn_b <- subset(as.data.frame(dataExprs_b), rownames(as.data.frame(dataExprs_b)) %in% csn_pca_names_b) #expression data of the filtered names
+
+csn_filtered_transcripts_b <- rownames(as.data.frame(filtered_csn_b))
+rownames(filtered_csn_b) <- csn_filtered_transcripts_b
+
+filtered_pca_b <- t(filtered_csn_b)
+
+res_pca_b <- prcomp(filtered_pca_b , scale = TRUE) #perform the pca
+summary(res_pca_b)
+```
+In the breast cancer dataset the Eigenvalue for the first 6 PCs is above 1. However,the first 9 PCs are needed to explain over 90% of the cumulative variance. 
+```{r, echo = F, fig.show='hide'}
+# Screenplot for the first 10 PCs
+
+screeplot(res_pca_b, type = "l", npcs = 10, main = "Screeplot of the first 10 PCs")
+abline(h = 1, col="red", lty=5)
+legend("topright", legend=c("Eigenvalue = 1"),
+       col=c("red"), lty=5, cex=0.6)
+```
+```{r, echo = F, fig.show='hide'}
+# cumulative variance plot to visualize the PCs with >90% cumulative variance
+
+cumpro <- cumsum(res_pca_b$sdev^2 / sum(res_pca_b$sdev^2))
+plot(cumpro, xlab = "PC #", ylab = "Amount of explained variance", main = "Cumulative variance plot")
+abline(v = 9, col="blue", lty=5)
+abline(h = 0.91585, col="blue", lty=5)
+legend("topleft", legend=c("Cut-off @ PC9"),
+       col=c("blue"), lty=5, cex=0.6)
+```
+````{r, echo = F, fig.show='hide'}
+# plotting the two PCs which explain the most variance
+
+plot(res_pca_b$x[,1],res_pca_b$x[,2], xlab="PC1 (22,9 %)", ylab = "PC2 (15,1 %)", main = "PC1 / PC2 - plot")
+```
+
+```{r, echo = F, fig.cap="\\label{fig:figs}PCA biplot"}
+library(factoextra)
+library(stringr)
+
+samples_b <- rownames(filtered_pca_b)
+group_br <- sapply(samples_b, function(sample) {
+  ifelse(str_detect(sample, "TNBC"), "TNBC", "LumA")
+})
+group_br <- sapply(samples_b, function(sample) {
+  ifelse(str_detect(sample, "Her2"), "Her2", group_br[sample])
+})
+group_br <- sapply(samples_b, function(sample) {
+  ifelse(str_detect(sample, "LumB"), "LumB", group_br[sample])
+}) # mark all different breast cancer types in seperate groups
+
+fviz_pca_biplot(res_pca_b,
+             label = "var",
+             habillage = group_br,
+             addEllipses = TRUE,
+             select.var = list(contrib = 10)) +
+  theme_minimal() +
+  ggtitle("2D PCA-plot from 19 feature dataset") +
+  theme(plot.title = element_text(hjust = 0.5)) # pca biplot
+```
+
+For the breast cancer dataset the PCA biplot, similarly to the lung cancer PCA biplot, shows no clear distinction between the different groups. However, in this case we differentiate between the four different cancer types HER2, LumA, LumB and TNBC.
+As a result of our PCA we could not find any significant correlation effects between the different groups, neither in the lung cancer dataset nor in the breast cancer one. 
+However, a possible effect cannot be ruled out entirely, because while all of the groups overlapped mostly, they did not entirely overlap. That means with a bigger dataset the groups could be more distinct.
+
+
+## T-test
+
+In order to find out some relationship in the lung cancer data type, we use t-test to prove whether there is significant difference between the different genes. we set the ho hypothesis: The cancerous group has overall the same expression value  in comparison to the non-cancerous group. To verify this hypothesis  we divide the lung cancer data type in cancerous and  non-cancerous chips. so we have two group of chips, in one group there are cancerous chips and in another group there are only non-cancerous chips. There are ten CSN genes  which we have interest to find out the relationship between the cancerous and non-cancerous group .The expression value of every single CSN are extracted , and we compare directly the expression level between the two groups. We perform the t-test using this code.
+
+The results show that gens CSNK2A1,CSN1S1,CSNK1G2,CSNk1E,CSNK1G1,CSNK2B has a p value under 0,05, so that we can say that this gen in cancerous group are higher expressed than gen in non-cancerous group. The results are also acceptable because out of 10 gens 6 of them have a higher expression value than the non-cancerous group.  The other genes have higher p value as 0,05 meaning we can not criticize the h0 hypothesis that the expression level of gen between this two groups is same. so it could be important for the researchers to look closer into the expression pattern of CSNK2A1 gen ,the reason why this gen is higher expressed in lung cancer patient.
+
+looking at the results from t-test we can get to the conclusion that the hypothesis that the gene in cancerous group should have a higher expression value than in non-cancerous group is valid. The question is why there are still four genes left which manifest the same expression pattern both in cancerous group and in non-cancerous group. it may be caused by the calculation mechanism by the t-test where the mean value are compared with each other.In this case a abnormal value which should have led to difference could be ignored if they are all averaged.  
+
+
+
+```{r, echo = FALSE, warning = F}
+
+#lung cancer
+chipname = colnames(dataExprs)
+cancerous = grep("ca", chipname)
+dataExprs1 = dataExprs[,cancerous]
+head(dataExprs1)
+
+dim(data)
+healthy = grep("n",chipname)
+dataExprs6 = dataExprs[,healthy]
+head(dataExprs6)
+
+# t-test for the gen CSNK2A1
+genelist = rownames(dataExprs1)
+CSNK2A1 = grep("CSNK2A1", genelist)
+genesofinterest <- c(CSNK2A1)
+head(dataExprs1[genesofinterest,])
+csn.cancerous = dataExprs1[genesofinterest,]
+
+
+CSNK2A1 = grep("CSNK2A1", genelist)
+genesofinterest <- c(CSNK2A1)
+head(dataExprs6[genesofinterest,])
+csn.healthy = dataExprs6[genesofinterest,]
+
+
+tt_CSNK2A1 = t.test(csn.cancerous,csn.healthy,alternative = 'greater',var.equal = TRUE)
+ result1 =  tt_CSNK2A1$p.value
+result1
+
+# t-test for the gen CSN1S1
+genelist = rownames(dataExprs1)
+CSN1S1 = grep("CSN1S1", genelist)
+genesofinterest <- c(CSN1S1)
+head(dataExprs1[genesofinterest,])
+
+genelist = rownames(dataExprs6)
+CSN1S1   = grep("CSN1S1", genelist)
+genesofinterest <- c(CSN1S1)
+head(dataExprs6[genesofinterest,])
+csn.healthy = dataExprs6[genesofinterest,]
+
+
+tt_CSN1S1 = t.test(csn.cancerous,csn.healthy,alternative = 'greater',var.equal = TRUE)
+result2 = tt_CSN1S1$p.value
+result2
+
+#t-test for the gen CSNK1G2
+genelist = rownames(dataExprs1)
+CSNK1G2  = grep("CSNK1G2", genelist)
+genesofinterest <- c(CSNK1G2)
+head(dataExprs1[genesofinterest,])
+csn.cancerous = dataExprs1[genesofinterest,]
+
+genelist = rownames(dataExprs6)
+CSNK1G2   = grep("CSNK1G2", genelist)
+genesofinterest <- c(CSNK1G2)
+head(dataExprs6[genesofinterest,])
+csn.healthy = dataExprs6[genesofinterest,]
+
+tt_CSNK1G2 = t.test(csn.cancerous,csn.healthy,alternative = 'greater',var.equal = TRUE)
+result3=tt_CSNK1G2$p.value
+result3
+
+#t-test for the gen CSNK1A1
+genelist = rownames(dataExprs1)
+CSNK1A1 = grep("CSNK1A1", genelist)
+genesofinterest <- c(CSNK1A1)
+head(dataExprs1[genesofinterest,])
+csn.cancerous = dataExprs1[genesofinterest,]
+
+genelist = rownames(dataExprs6)
+CSNK1A1   = grep("CSNK1A1", genelist)
+genesofinterest <- c(CSNK1A1)
+head(dataExprs6[genesofinterest,])
+csn.healthy = dataExprs6[genesofinterest,]
+
+tt_CSNK1A1 = t.test(csn.cancerous,csn.healthy,alternative = 'greater',var.equal = TRUE)
+result4= tt_CSNK1A1$p.value
+result4
+
+#t-test for gen CSNK2A2
+genelist = rownames(dataExprs1)
+CSNK2A2 = grep("CSNK2A2", genelist)
+genesofinterest <- c(CSNK2A2)
+head(dataExprs1[genesofinterest,])
+csn.cancerous = dataExprs1[genesofinterest,]
+
+genelist = rownames(dataExprs6)
+CSNK2A2   = grep("CSNK2A2", genelist)
+genesofinterest <- c(CSNK2A2)
+head(dataExprs6[genesofinterest,])
+csn.healthy = dataExprs6[genesofinterest,]
+tt_CSNK2A2 = t.test(csn.cancerous,csn.healthy,alternative = 'greater',var.equal = TRUE)
+result5= tt_CSNK2A2$p.value
+result5
+
+#t-test for gen CSNK1D 
+genelist = rownames(dataExprs1)
+CSNK1D= grep("CSNK1D", genelist)
+genesofinterest <- c(CSNK1D)
+head(dataExprs1[genesofinterest,])
+csn.cancerous = dataExprs1[genesofinterest,]
+
+genelist = rownames(dataExprs6)
+CSNK1D   = grep("CSNK1D", genelist)
+genesofinterest <- c(CSNK1D)
+head(dataExprs6[genesofinterest,])
+csn.healthy = dataExprs6[genesofinterest,]
+
+tt_CSNK1D = t.test(csn.cancerous,csn.healthy,alternative = 'greater',var.equal = TRUE)
+result6= tt_CSNK1D$p.value
+result6
+
+#t-test for gen CSNK1E
+genelist = rownames(dataExprs1)
+CSNK1E= grep("CSNK1E", genelist)
+genesofinterest <- c(CSNK1E)
+head(dataExprs1[genesofinterest,])
+csn.cancerous = dataExprs1[genesofinterest,]
+
+genelist = rownames(dataExprs6)
+CSNK1E   = grep("CSNK1E", genelist)
+genesofinterest <- c(CSNK1E)
+head(dataExprs6[genesofinterest,])
+csn.healthy = dataExprs6[genesofinterest,]
+
+tt_CSNK1E = t.test(csn.cancerous,csn.healthy,alternative = 'greater',var.equal = TRUE)
+result7= tt_CSNK1E$p.value
+result7
+
+#t-test for gen CSNK1G3
+genelist = rownames(dataExprs1)
+CSNK1G3= grep("CSNK1G3", genelist)
+genesofinterest <- c(CSNK1G3)
+head(dataExprs1[genesofinterest,])
+csn.cancerous = dataExprs1[genesofinterest,]
+
+genelist = rownames(dataExprs6)
+CSNK1G3   = grep("CSNK1G3", genelist)
+genesofinterest <- c(CSNK1G3)
+head(dataExprs6[genesofinterest,])
+csn.healthy = dataExprs6[genesofinterest,]
+
+tt_CSNK1G3 = t.test(csn.cancerous,csn.healthy,alternative = 'greater',var.equal = TRUE)
+result8= tt_CSNK1G3$p.value
+result8
+
+#t-test for gen CSNK1G1
+genelist = rownames(dataExprs1)
+CSNK1G1= grep("CSNK1G1", genelist)
+genesofinterest <- c(CSNK1G1)
+head(dataExprs1[genesofinterest,])
+csn.cancerous = dataExprs1[genesofinterest,]
+
+genelist = rownames(dataExprs6)
+CSNK1G1   = grep("CSNK1G1", genelist)
+genesofinterest <- c(CSNK1G1)
+head(dataExprs6[genesofinterest,])
+csn.healthy = dataExprs6[genesofinterest,]
+
+tt_CSNK1G1 = t.test(csn.cancerous,csn.healthy,alternative = 'greater',var.equal = TRUE)
+result9= tt_CSNK1G1$p.value
+result9
+#t-test for gen CSNK2B
+genelist = rownames(dataExprs1)
+CSNK2B= grep("CSNK2B", genelist)
+genesofinterest <- c(CSNK2B)
+head(dataExprs1[genesofinterest,])
+csn.cancerous = dataExprs1[genesofinterest,]
+
+genelist = rownames(dataExprs6)
+CSNK2B   = grep("CSNK2B", genelist)
+genesofinterest <- c(CSNK2B)
+head(dataExprs6[genesofinterest,])
+csn.healthy = dataExprs6[genesofinterest,]
+
+tt_CSNK2B = t.test(csn.cancerous,csn.healthy,alternative = 'greater',var.equal = TRUE)
+result10= tt_CSNK2B$p.value
+result10
+
+
+test <- c(result1,result2,result3,result4,result5,result6,result7,result8,result9,result10)
+result = data.matrix(test)
+rownames(result) <- c("CSNK2A1","CSN1S1","CSNK1G2","CSNK1A1","CSNK2A2","CSNK1D","CSNK1E","CSNK1G3","CSNK1G1","CSNK2B")
+result = as.data.frame(result)
+result
+
+
+
+#one way anova for breast cancer
+
+genes = c("CSNK2A1","CSN1S1","CSNK1G2","CSNK2B","CSNK1A1","CSNK2A2","CSNK1G1","CSNK1G3","CSNK1D","CSNK1G3")
+
+
+# dataExprs
+
+
+p_values <- sapply(genes, function(gene) {
+  anova_df <- lapply(c("Her2", "TNBC", "LumA", "LumB"), function(cancer_type) {
+    chips <- grep(cancer_type, colnames(dataExprs_b), value = TRUE)
+    exprs_vals <- dataExprs_b[gene, chips]
+    gene_df <- data.frame(CancerType = cancer_type,
+                          Expression = exprs_vals)
+    return(gene_df)
+  }) %>%
+    bind_rows()
+  
+  anova <- aov(Expression ~ CancerType, data = anova_df)
+  anovaSummary <- summary(anova)[[1]]
+  rownames(anovaSummary) <- str_trim(rownames(anovaSummary))
+  
+  p_val <- anovaSummary["CancerType", "Pr(>F)"]
+  
+  return(p_val)
+})
+  p_values
+  
+```
+
+
+The other data type is breast cancer. there are 20 chips with 4 different type from breast cancer, so we want to compare the expression pattern in these 4 different types from breast cancer. In order to do this, we use one way anova test. in this case, we find out that the 10 genes we have fast the same expression level because the p value are all higher as 0,05. It is not astonishing because we are comparing the different breast cancer types.
+
+
+```{r, echo = F, warning = F, fig.cap="\\label{fig:figs}Regression lung cancer"}
+
+#regression model
+
+#lungcancer
+regrtable = dataExprs[genesofinterest_l,]
+regrtable = data.frame(regrtable)
+genelist = rownames(regrtable)
+
+regrtable[1,1]
+
+C = grep("CSN", genelist)
+E = grep("ELF5", genelist)
+L = grep("LALBA", genelist)
+S = grep("SULT", genelist)
+O = grep("ODAM", genelist)
+
+
+values1 = 0
+values2 = 0
+values3 = 0
+values4 = 0
+
+x = 1
+y = 1
+
+#CSN/ELF5
+for(x in 1:length(C)) {
+  for(y in 1:length(E)) {
+   
+model <- summary(lm(t(regrtable[C[x],])~t(regrtable[E[y],]), data = regrtable))
+coeff = model$coefficients
+values1 <- c(values1,coeff[2,4])
+ }
+}
+#CSN/LALBA
+
+x = 1
+y = 1
+
+for(x in 1:length(C)) {
+  for(y in 1:length(L)) {
+   
+model <- summary(lm(t(regrtable[C[x],])~t(regrtable[L[y],]), data = regrtable))
+coeff = model$coefficients
+values2 <- c(values2,coeff[2,4])
+ }
+}
+#CSN/SULT
+
+x = 1
+y = 1
+
+for(x in 1:length(C)) {
+  for(y in 1:length(S)) {
+   
+model <- summary(lm(t(regrtable[C[x],])~t(regrtable[S[y],]), data = regrtable))
+coeff = model$coefficients
+values3 <- c(values3,coeff[2,4])
+ }
+}
+#CSN/ODAM
+
+x = 1
+y = 1
+
+for(x in 1:length(C)) {
+  for(y in 1:length(O)) {
+   
+model <- summary(lm(t(regrtable[C[x],])~t(regrtable[O[y],]), data = regrtable))
+coeff = model$coefficients
+values4 <- c(values4,coeff[2,4])
+ }
+}
+
+A <- c("values1","values2","values3","values4")
+dataList <- lapply(A, get, envir=environment())
+
+boxplot(dataList, main = "Linear regression model", col = rainbow(4), cex.axis= 1, names = c("CSN/ELF5","CSN/LALBA","CSN/SULT1A1","CSN/ODAM"), y = "p value", sub ="blue line 0.05 ")
+abline(h = 0.05, col = "pink", lwd=c(3))
+
+
+```
+
+
+```{r, echo = FALSE, warning = F, fig.cap="\\label{fig:figs}Regression breast cancer"}
+
+#breastcancer
+regrtable = dataExprs_b[genesofinterest_b,]
+regrtable = data.frame(regrtable)
+genelist = rownames(regrtable)
+
+C = grep("CSN", genelist)
+E = grep("ELF5", genelist)
+L = grep("LALBA", genelist)
+S = grep("SULT", genelist)
+O = grep("ODAM", genelist)
+
+values1 = 0
+values2 = 0
+values3 = 0
+values4 = 0
+
+x = 1
+y = 1
+
+#CSN/ELF5
+for(x in 1:length(C)) {
+  for(y in 1:length(E)) {
+   
+model <- summary(lm(t(regrtable[C[x],])~t(regrtable[E[y],]), data = regrtable))
+coeff = model$coefficients
+values1 <- c(values1,coeff[2,4])
+ }
+}
+#CSN/LALBA
+
+x = 1
+y = 1
+
+for(x in 1:length(C)) {
+  for(y in 1:length(L)) {
+   
+model <- summary(lm(t(regrtable[C[x],])~t(regrtable[L[y],]), data = regrtable))
+coeff = model$coefficients
+values2 <- c(values2,coeff[2,4])
+ }
+}
+#CSN/SULT
+
+x = 1
+y = 1
+
+for(x in 1:length(C)) {
+  for(y in 1:length(S)) {
+   
+model <- summary(lm(t(regrtable[C[x],])~t(regrtable[S[y],]), data = regrtable))
+coeff = model$coefficients
+values3 <- c(values3,coeff[2,4])
+ }
+}
+#CSN/ODAM
+
+x = 1
+y = 1
+
+for(x in 1:length(C)) {
+  for(y in 1:length(O)) {
+   
+model <- summary(lm(t(regrtable[C[x],])~t(regrtable[O[y],]), data = regrtable))
+coeff = model$coefficients
+values4 <- c(values4,coeff[2,4])
+ }
+}
+
+A <- c("values1","values2","values3","values4")
+dataList <- lapply(A, get, envir=environment())
+
+boxplot(dataList, main = "Linear regression model", col = rainbow(4), cex.axis=1.2, names = c("CSN/ELF5","CSN/LALBA","CSN/SULT1A1","CSN/ODAM"), y = "p value", sub ="blue line 0.05 ")
+abline(h = 0.05, col = "pink", lwd=c(3))
+
+```
+
+## Regression model
+
+The last method used is a linear regression model to evaluate if there are significant correlations between the casein genes and the genes Sult1A1, ODAM, ELF5. In this last step every csn transcript was compared with one of the before mentioned genes. The F-test was used to determine if the thesis is valid or not. In a boxplot diagram we compared if there is a visible tendency for the different genes. Earlier we saw that a lot of transcripts have almost equal expression values this has to be considered. The problem is if on gene has more equal transcripts than every other. That could mean these transcripts could outweigh the other genes easily if an effect occurs. A solution would have been to use a median value out of this data, but we were told to work with all transcripts.
+The lung cancer dataset does show some correlation between CSN/ODAM but the other genes dont. On the other hand-side the breast cancer dataset shows some significant tendencies towards CSN/LALBA and CSN/ODAM.  Every time about 50% of the p-values are lower then 0,05. Since this method uses all values of every chip to compare this could probably let us assume that the CSN/LALBA correlation is specific to breast cancer and is probably found in all 4 subtypes. Very interesting is the CSN/ODAM correlation which occurs in both cancer datasets. This is very interesting, because this one is a colocalized gene and usually dont show correlation to casein gene expression as mentioned in the introduction.    
+
+
+
+## References
+
+Cai, L., Liu, H., Huang, F., Fujimoto, J., Girard, L., Chen, J., Li, Y., Zhang, Y.-A., Deb, D., and Stastny, V., et al. (2021). Cell-autonomous immune gene expression is repressed in pulmonary neuroendocrine cells and small cell lung cancer. Commun Biol *4*, 314. 
+
+Derbinski, J., Pinto, S., Rösch, S., Hexel, K., & Kyewski, B. (2008). Promiscuous gene expression patterns in single medullary thymic epithelial cells argue for a stochastic mechanism. Proc. Natl. Acad. Sci., *105*, 657-662.
+
+Dinkelacker, M. (2019). Chromosomal clustering of tissue restricted antigens, Dissertation, University Heidelberg, Germany.
+
+Dinkelacker, M. (2007). A database of genes that are expressed in a tissue-restricted manner to analyse promiscous gene expression in medullary thymic epithelial cells. Diplomarbeit, Albert-Ludwigs-Universitaet, Freiburg, Germany.
+
+Gazdar, A.F., Bunn, P.A., and Minna, J.D. (2017). Small-cell lung cancer: what we know, what we need to know and the path forward. Nature reviews. Cancer *17*, 725-737. 
+
+GTEx Consortium. (2015). The Genotype-Tissue Expression (GTEx) pilot analysis: Multitissue gene regulation in humans. Science, *348*, 648-660.
+
+Lattin, J.E., Schroder, K., Su, A.I., Walker, J.R., Zhang, J., Wiltshire, T., Saijo, K., Glass, C.K., Hume, D.A., and Kellie, S., et al. (2008). Expression analysis of G Protein-Coupled Receptors in mouse macrophages. Immunome Research *4*, 5. 
+
+Lonsdale, J., Thomas, J., Salvatore, M., Phillips, R., Lo, E., Shad, S., Hasz, R., Walters, G., Garcia, F., and Young, N., et al. (2013). The Genotype-Tissue Expression (GTEx) project. Nature Genetics *45*, 580-585.
+
+Maire, V., Baldeyron, C., Richardson, M., Tesson, B., Vincent-Salomon, A., Gravier, E., Marty-Prouvost, B., Koning, L. de, Rigaill, G., and Dumont, A., et al. (2013). TTK/hMPS1 is an attractive therapeutic target for triple-negative breast cancer. PloS one *8*, e63712. 
+
+Maire, V., Némati, F., Richardson, M., Vincent-Salomon, A., Tesson, B., Rigaill, G., Gravier, E., Marty-Prouvost, B., Koning, L. de, and Lang, G., et al. (2013). Polo-like kinase 1: a potential therapeutic option in combination with conventional chemotherapy for the management of patients with triple-negative breast cancer. Cancer research *73*, 813-823. 
+
+Maubant, S., Tesson, B., Maire, V., Ye, M., Rigaill, G., Gentien, D., Cruzalegui, F., Tucker, G.C., Roman-Roman, S., and Dubois, T. (2015). Transcriptome analysis of Wnt3a-treated triple-negative breast cancer cells. PloS one *10*, e0122333. 
+
+Rijnkels, M. (2002). Multispecies comparison of the casein gene loci and evolution of casein gene family. J Mammary Gland Biol Neoplasia *7*, 327-345.
+
+Rosenberg, S. A. (1999). A new era for cancer immunotherapy based on the genes that encode cancer antigens. Immunity *10*, 281-287.
+
+Roth, R.B., Hevezi, P., Lee, J., Willhite, D., Lechner, S.M., Foster, A.C., and Zlotnik, A. (2006). Gene expression analyses reveal molecular relationships among 20 regions of the human CNS. Neurogenetics *7*, 67-80. 
+
+Su, A.I., Cooke, M.P., Ching, K.A., Hakak, Y., Walker, J.R., Wiltshire, T., Orth, A.P., Vega, R.G., Sapinoso, L.M., and Moqrich, A., et al. (2002). Large-scale analysis of the human and mouse transcriptomes. Proceedings of the National Academy of Sciences of the United States of America *99*, 4465-4470. 
+
+Su, A.I., Wiltshire, T., Batalov, S., Lapp, H., Ching, K.A., Block, D., Zhang, J., Soden, R., Hayakawa, M., and Kreiman, G., et al. (2004). A gene atlas of the mouse and human protein-encoding transcriptomes. Proceedings of the National Academy of Sciences of the United States of America *101*, 6062-6067. 
+
+Uhlén, M., Fagerberg, L., Hallström, B.M., Lindskog, C., Oksvold, P., Mardinoglu, A., Sivertsson, Å., Kampf, C., Sjöstedt, E., and Asplund, A., et al. (2015). Proteomics. Tissue-based map of the human proteome. Science (New York, N.Y.) *347*, 1260419. 
